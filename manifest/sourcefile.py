@@ -1,5 +1,6 @@
 import imp
 import os
+import re
 from six.moves.urllib.parse import urljoin
 from fnmatch import fnmatch
 try:
@@ -74,7 +75,7 @@ class SourceFile(object):
         use_comitted is true."""
 
         if self.use_committed:
-            git = vcs.get_git_func(os.path.dirname(__file__))
+            git = vcs.get_git_func(localpaths.repo_root)
             blob = git("show", "HEAD:%s" % self.rel_path)
             file_obj = ContextManagerStringIO(blob)
         else:
@@ -176,6 +177,16 @@ class SourceFile(object):
     def timeout(self):
         """The timeout of a test or reference file. "long" if the file has an extended timeout
         or None otherwise"""
+        if self.name_is_worker:
+            meta_re = re.compile("//\s*<meta>\s*(\w*)=(.*)$")
+            with self.open() as f:
+                for line in f:
+                    m = meta_re.match(line)
+                    if m and m.groups()[0] == "timeout":
+                        if m.groups()[1].lower() == "long":
+                            return "long"
+                        return
+
         if not self.root:
             return
 
@@ -297,7 +308,7 @@ class SourceFile(object):
             rv = [ManualTest(self, self.url)]
 
         elif self.name_is_worker:
-            rv = [TestharnessTest(self, self.url[:-3])]
+            rv = [TestharnessTest(self, self.url[:-3], timeout=self.timeout)]
 
         elif self.name_is_webdriver:
             rv = [WebdriverSpecTest(self, self.url)]
